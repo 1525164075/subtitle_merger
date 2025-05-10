@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>字幕工具：合并、格式与符号检查 </title>
+    <style>
+        body { font-family: sans-serif, Tahoma, Geneva, Verdana; margin: 20px; background-color: #f9f9f9; color: #333; line-height: 1.6; overflow-x: hidden; }
+        .container { background-color: #fff; padding: 25px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); max-width: 950px; margin: 20px auto; position: relative; }
+        h1, h2 { color: #007bff; text-align: center; margin-bottom: 20px; }
+        h2 { font-size: 1.6em; margin-top: 35px; border-bottom: 1px solid #eee; padding-bottom: 10px;}
+        label { display: block; margin-top: 15px; margin-bottom: 8px; font-weight: 600; color: #555; }
+        textarea {
+            width: calc(100% - 22px);
+            min-height: 180px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.9rem;
+            line-height: 1.5;
+            margin-bottom: 10px;
+        }
+        textarea:focus { border-color: #007bff; box-shadow: 0 0 8px rgba(0,123,255,0.2); outline: none; }
+        .input-area, .output-area { margin-bottom: 25px; }
+        .button-group { margin-top: 20px; text-align: center; display: flex; flex-wrap: wrap; justify-content: center; gap:10px;}
+        button { background-color: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 0.95rem; transition: background-color 0.2s ease, transform 0.1s ease; margin: 5px;}
+        button:hover { background-color: #0056b3; transform: translateY(-1px); }
+        button:active { transform: translateY(0px); }
+
+        /* 为AJAX按钮特定样式，如果需要 */
+        #checkFormatButtonAjax { background-color: #28a745; }
+        #checkFormatButtonAjax:hover { background-color: #1e7e34; }
+        #checkSymbolsButtonAjax { background-color: #ffc107; color:#212529;}
+        #checkSymbolsButtonAjax:hover { background-color: #e0a800; }
+
+        .message-area { margin-top: 15px; padding: 12px 15px; border-radius: 4px; white-space: pre-wrap; word-wrap: break-word; font-size: 0.9em; min-height: 20px; /* 确保即使空也有高度 */ }
+        .error-messages { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .success-message { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .info-messages { background-color: #cce5ff; color: #004085; border: 1px solid #b8daff; } /* 用于符号列表 */
+
+
+        .instructions { background-color: #eef6ff; border-left: 5px solid #007bff; padding: 15px; margin-bottom: 30px; border-radius: 5px; font-size: 0.9em; }
+        .instructions p, .instructions pre, .instructions ul { margin: 10px 0; }
+        .instructions strong { color: #0056b3; }
+        .instructions code { background-color: #e0e0e0; padding: 2px 5px; border-radius: 3px; font-family: 'Courier New', Courier, monospace;}
+        .instructions ul { padding-left: 20px; }
+        .instructions li { margin-bottom: 5px; }
+
+        .flex-container { display: flex; gap: 20px; flex-wrap: wrap; }
+        .flex-item { flex: 1; min-width: 350px; }
+        pre { background-color: #f4f4f8; padding: 12px; border-radius: 4px; border: 1px solid #e0e0e6; white-space: pre-wrap; word-wrap: break-word; font-size: 0.85em; max-height: 300px; overflow-y: auto;}
+        hr { border: 0; height: 1px; background-color: #e0e0e6; margin: 30px 0; }
+
+        /* --- Confetti Styles (与之前版本相同) --- */
+        #confetti-canvas { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; overflow: hidden; z-index: 9999; }
+        .confetti-piece { position: absolute; width: 8px; height: 12px; opacity: 0; transform-origin: center center; animation: burstAndFall 3s ease-out forwards; }
+        @keyframes burstAndFall {
+            0% { transform: translate(0, 0) rotate(0deg) scale(0.3); opacity: 1; }
+            25% { transform: translate(var(--burst-x), var(--burst-y)) rotate(var(--rotate-mid)) scale(1.1); opacity: 0.9; }
+            100% { transform: translate(var(--fall-x), 110vh) rotate(var(--rotate-end)) scale(0.7); opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>字幕工具：合并、格式与符号检查</h1>
+
+        <div class="instructions">
+            <p><strong>使用说明:</strong></p>
+            <ul>
+                <li><strong>合并字幕</strong>：
+                    <ul>
+                        <li>在对应文本框中粘贴英文字幕和中文字幕。</li>
+                        <li>中文字幕中的括号内容 (如 <code>(注释)</code> 或 <code>（全角注释）</code>) 会被自动移除。</li>
+                        <li>合并前会检查中英文对应序号的时间轴是否完全一致，不一致会报错并终止。</li>
+                        <li>字幕格式：序号、时间轴、文本，每个条目之间用<strong>一个空行</strong>隔开。</li>
+                    </ul>
+                </li>
+                <li><strong>格式与符号检查</strong> (使用下方同一个文本框输入已合并或待检查的字幕内容)：
+                    <ul>
+                        <li><strong>执行格式检查</strong>：
+                            <ul>
+                                <li>验证每段字幕是否大致符合“序号 -> 时间轴 -> 中文文本 -> 英文文本”的结构。</li>
+                                <li>检查序号是否从第一个出现的序号开始连续且递增。</li>
+                                <li>检查时间轴格式，以及时间逻辑（单个时间轴内开始≤结束，后一个时间轴开始≥前一个结束）。</li>
+                            </ul>
+                        </li>
+                        <li><strong>检查中文符号</strong>：检测是否存在指定的中文标点符号：<code>；</code> <code>，</code> <code>。</code> <code>！</code> <code>“</code> <code>”</code> <code>（</code> <code>）</code>。(不包括书名号 <code>《》</code> 和间隔号 <code>·</code>)</li>
+                        <li>如果检查无误，会有从按钮处迸发的撒花效果！</li>
+                    </ul>
+                </li>
+            </ul>
+        </div>
+
+        <h2>合并字幕</h2>
+        <form method="POST">
+            <div class="flex-container">
+                <div class="flex-item input-area">
+                    <label for="eng_content">英文字幕内容:</label>
+                    <textarea id="eng_content" name="eng_content" rows="10" placeholder="粘贴英文字幕...">{{ eng_input }}</textarea>
+                </div>
+                <div class="flex-item input-area">
+                    <label for="chs_content">中文翻译内容 (括号会自动移除):</label>
+                    <textarea id="chs_content" name="chs_content" rows="10" placeholder="粘贴中文翻译...">{{ chs_input }}</textarea>
+                </div>
+            </div>
+            <div class="button-group">
+                <button type="submit" name="submit_merge">合并字幕</button>
+            </div>
+        </form>
+
+        {% if merge_error_message %}
+            <div class="message-area error-messages">{{ merge_error_message }}</div>
+        {% endif %}
+        {% if merged_output %}
+            <div class="output-area">
+                <h3>合并结果预览:</h3>
+                <textarea readonly rows="15" placeholder="合并后的字幕将在此显示...">{{ merged_output }}</textarea>
+            </div>
+        {% endif %}
+
+        <hr>
+
+        <h2>格式与符号检查</h2>
+        <form id="checkForm">
+            <div class="input-area">
+                <label for="check_content">待检查的字幕内容:</label>
+                <textarea id="check_content" name="check_content" rows="12" placeholder="在此粘贴需要检查格式或中文符号的字幕内容...">{{ check_content_input }}</textarea>
+            </div>
+            <div class="button-group">
+                <button type="button" id="checkFormatButtonAjax">执行格式检查</button>
+                <button type="button" id="checkSymbolsButtonAjax">检查中文符号</button>
+            </div>
+        </form>
+
+        <h3>检查报告:</h3>
+        <div id="checkResultArea">
+            <div id="checkSuccessMessage" class="message-area success-message" style="display: none;"></div>
+            <div id="checkErrorMessages" class="message-area error-messages" style="display: none;"></div>
+            <div id="checkInfoMessages" class="message-area info-messages" style="display: none;"></div>
+        </div>
+
+    </div>
+
+    <script>
+        // Confetti trigger function (与之前版本相同)
+        function triggerConfetti(buttonElement) {
+            console.log('[DEBUG] triggerConfetti called for button:', buttonElement.id);
+            const confettiContainer = document.createElement('div');
+            confettiContainer.id = 'confetti-canvas';
+            document.body.appendChild(confettiContainer);
+            const buttonRect = buttonElement.getBoundingClientRect();
+            if (!buttonRect || buttonRect.width === 0) {
+                console.error("Button for confetti not found or not visible");
+                if(document.body.contains(confettiContainer)) document.body.removeChild(confettiContainer);
+                return;
+            }
+            const originX = buttonRect.left + buttonRect.width / 2;
+            const originY = buttonRect.top + buttonRect.height / 2;
+            const colors = ['#f44336', '#e91e63', '#9c27b0', '#673ab7', '#3f51b5', '#2196f3', '#03a9f4', '#00bcd4', '#009688', '#4caf50', '#8bc34a', '#cddc39', '#ffeb3b', '#ffc107', '#ff9800', '#795548'];
+            const numConfetti = 100;
+            for (let i = 0; i < numConfetti; i++) {
+                const piece = document.createElement('div');
+                piece.classList.add('confetti-piece');
+                piece.style.left = originX + 'px';
+                piece.style.top = originY + 'px';
+                piece.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+                const angle = Math.random() * Math.PI * 2;
+                const burstPower = Math.random() * 120 + 90;
+                const burstX = Math.cos(angle) * burstPower;
+                const burstY = Math.sin(angle) * burstPower - burstPower * 0.4;
+                const fallXOffset = (Math.random() - 0.5) * (window.innerWidth * 0.5);
+                const finalFallX = burstX + fallXOffset;
+                const rotateMid = (Math.random() * 720 - 360) + 'deg';
+                const rotateEnd = (Math.random() * 1080 - 540) + 'deg';
+                piece.style.setProperty('--burst-x', burstX + 'px');
+                piece.style.setProperty('--burst-y', burstY + 'px');
+                piece.style.setProperty('--fall-x', finalFallX + 'px');
+                piece.style.setProperty('--rotate-mid', rotateMid);
+                piece.style.setProperty('--rotate-end', rotateEnd);
+                const animDuration = Math.random() * 1.0 + 2.8;
+                piece.style.animationDuration = animDuration + 's';
+                piece.style.animationDelay = Math.random() * 0.4 + 's';
+                if (Math.random() < 0.25) {
+                    piece.style.borderRadius = '50%';
+                    const size = Math.random() * 4 + 7 + 'px';
+                    piece.style.width = size; piece.style.height = size;
+                } else {
+                    piece.style.width = (Math.random() * 6 + 7) + 'px';
+                    piece.style.height = (Math.random() * 9 + 11) + 'px';
+                }
+                confettiContainer.appendChild(piece);
+            }
+            setTimeout(() => {
+                if (document.body.contains(confettiContainer)) document.body.removeChild(confettiContainer);
+            }, 7000);
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const checkContentTextArea = document.getElementById('check_content');
+            const checkFormatButton = document.getElementById('checkFormatButtonAjax');
+            const checkSymbolsButton = document.getElementById('checkSymbolsButtonAjax');
+
+            const successMessageDiv = document.getElementById('checkSuccessMessage');
+            const errorMessagesDiv = document.getElementById('checkErrorMessages');
+            const infoMessagesDiv = document.getElementById('checkInfoMessages'); // For symbol list
+
+            function displayResults(data) {
+                // 清空之前的消息
+                successMessageDiv.style.display = 'none';
+                successMessageDiv.innerHTML = '';
+                errorMessagesDiv.style.display = 'none';
+                errorMessagesDiv.innerHTML = '';
+                infoMessagesDiv.style.display = 'none';
+                infoMessagesDiv.innerHTML = '';
+
+                if (data.status === "success" && data.message) {
+                    successMessageDiv.innerHTML = `<p>${data.message}</p>`;
+                    successMessageDiv.style.display = 'block';
+                }
+
+                if (data.errors && data.errors.length > 0) {
+                    // 如果是符号检查且找到符号，用 info 样式
+                    const targetDiv = (data.confetti_trigger === 'checkSymbolsButton' && data.status === 'info') ? infoMessagesDiv : errorMessagesDiv;
+
+                    let errorHTML = '';
+                    data.errors.forEach(err => {
+                        // 将错误字符串中的换行符替换为 <br> 以便在 pre 标签中正确显示多行
+                        // 或者直接用 pre 标签包裹，它会保留换行符
+                        errorHTML += `<pre>${escapeHtml(err)}</pre><hr style="border-color: #f5c6cb; margin: 10px 0;">`;
+                    });
+                    targetDiv.innerHTML = errorHTML.slice(0, -1 * (`<hr style="border-color: #f5c6cb; margin: 10px 0;">`).length); // 移除最后一个hr
+                    targetDiv.style.display = 'block';
+                }
+                 // 如果符号检查成功（未发现符号），也可能有成功消息
+                if (data.confetti_trigger === 'checkSymbolsButton' && data.status === 'success' && data.message) {
+                     successMessageDiv.innerHTML = `<p>${data.message}</p>`;
+                     successMessageDiv.style.display = 'block';
+                }
+
+
+                if (data.show_confetti && data.confetti_trigger) {
+                    const triggerButton = document.getElementById(data.confetti_trigger);
+                    if (triggerButton) {
+                        // 延迟一点点确保DOM更新完成
+                        setTimeout(() => triggerConfetti(triggerButton), 50);
+                    }
+                }
+            }
+
+            function escapeHtml(unsafe) {
+                return unsafe
+                     .replace(/&/g, "&amp;")
+                     .replace(/</g, "&lt;")
+                     .replace(/>/g, "&gt;")
+                     .replace(/"/g, "&quot;")
+                     .replace(/'/g, "&#039;");
+            }
+
+
+            async function handleCheckRequest(url, buttonId) {
+                const content = checkContentTextArea.value;
+                // 显示加载状态 (可选)
+                // successMessageDiv.style.display = 'none';
+                // errorMessagesDiv.style.display = 'none';
+                // infoMessagesDiv.style.display = 'none';
+                // infoMessagesDiv.innerHTML = '<p>检查中...</p>';
+                // infoMessagesDiv.style.display = 'block';
+
+
+                try {
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ check_content: content }),
+                    });
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    const data = await response.json();
+                    displayResults(data);
+                } catch (error) {
+                    console.error('Fetch Error:', error);
+                    errorMessagesDiv.innerHTML = `<p>请求失败: ${error.message}</p>`;
+                    errorMessagesDiv.style.display = 'block';
+                    infoMessagesDiv.style.display = 'none'; // 确保加载状态被清除
+                }
+            }
+
+            if (checkFormatButton) {
+                checkFormatButton.addEventListener('click', function() {
+                    handleCheckRequest('/ajax_check_format', 'checkFormatButtonAjax');
+                });
+            }
+
+            if (checkSymbolsButton) {
+                checkSymbolsButton.addEventListener('click', function() {
+                    handleCheckRequest('/ajax_check_symbols', 'checkSymbolsButtonAjax');
+                });
+            }
+        });
+    </script>
+</body>
+</html>
